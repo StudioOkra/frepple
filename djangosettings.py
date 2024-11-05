@@ -68,9 +68,9 @@ DATABASES = {
         # the ip4 address or the ip6 address here.
         # Leave as an empty string to use Unix domain
         # socket ("local" lines in pg_hba.conf).
-        "HOST": os.environ.get("POSTGRES_HOST", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "172.19.0.2"),
         # Specify the port number when using a TCP socket.
-        "PORT": os.environ.get("POSTGRES_PORT", ""),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         "OPTIONS": {},
         "CONN_MAX_AGE": 600,
         "CONN_HEALTH_CHECKS": True,
@@ -117,9 +117,9 @@ DATABASES = {
         # the ip4 address or the ip6 address here.
         # Leave as an empty string to use Unix domain
         # socket ("local" lines in pg_hba.conf).
-        "HOST": os.environ.get("POSTGRES_HOST", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "172.19.0.2"),
         # Specify the port number when using a TCP socket.
-        "PORT": os.environ.get("POSTGRES_PORT", ""),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         # Specify the port number when using a TCP socket.
         "PORT": "",
         "OPTIONS": {},
@@ -168,9 +168,9 @@ DATABASES = {
         # the ip4 address or the ip6 address here.
         # Leave as an empty string to use Unix domain
         # socket ("local" lines in pg_hba.conf).
-        "HOST": os.environ.get("POSTGRES_HOST", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "172.19.0.2"),
         # Specify the port number when using a TCP socket.
-        "PORT": os.environ.get("POSTGRES_PORT", ""),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         "OPTIONS": {},
         "CONN_MAX_AGE": 600,
         "CONN_HEALTH_CHECKS": True,
@@ -217,9 +217,9 @@ DATABASES = {
         # the ip4 address or the ip6 address here.
         # Leave as an empty string to use Unix domain
         # socket ("local" lines in pg_hba.conf).
-        "HOST": os.environ.get("POSTGRES_HOST", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "172.19.0.2"),
         # Specify the port number when using a TCP socket.
-        "PORT": os.environ.get("POSTGRES_PORT", ""),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         # Specify the port number when using a TCP socket.
         "PORT": "",
         "OPTIONS": {},
@@ -271,6 +271,8 @@ INSTALLED_APPS = (
     "django.contrib.staticfiles",
     "freppledb.boot",
     # Add any project specific apps here
+    # "freppledb.my_app",
+    'freppledb.scheduler',
     # "freppledb.odoo",
     # "freppledb.erpconnection",
     "freppledb.wizard",
