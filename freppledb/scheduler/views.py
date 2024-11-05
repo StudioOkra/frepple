@@ -2,7 +2,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _
 from freppledb.common.report import GridReport, GridFieldText, GridFieldDateTime, GridFieldInteger
-from .models import SchedulingJob
+from .models import SchedulingJob, SchedulerConfiguration
+from django.views.generic.edit import CreateView
+from django.urls import reverse_lazy
+from .forms import SchedulingJobForm
 
 class GanttView(GridReport):
     """
@@ -71,3 +74,28 @@ class SchedulerJobList(GridReport):
     def filter_items(cls, request, items):
         # 可選：添加自定義過濾邏輯
         return items
+
+class SchedulerConfigList(GridReport):
+    """排程配置列表視圖"""
+    title = _('Scheduler Configurations')
+    model = SchedulerConfiguration
+    template = 'scheduler/schedulerconfig_list.html'
+    
+    basequeryset = SchedulerConfiguration.objects.all()
+    
+    rows = (
+        GridFieldText('name', title=_('name')),
+        GridFieldText('scheduling_method', title=_('scheduling method')),
+        GridFieldText('objective', title=_('objective')),
+        GridFieldDateTime('horizon_start', title=_('horizon start')),
+        GridFieldDateTime('horizon_end', title=_('horizon end')),
+        GridFieldInteger('time_limit', title=_('time limit')),
+    )
+    
+    default_sort = (0, 'asc')
+
+class SchedulingJobCreate(CreateView):
+    model = SchedulingJob
+    form_class = SchedulingJobForm
+    template_name = 'scheduler/schedulingjob_form.html'
+    success_url = '/data/scheduler/jobs/'

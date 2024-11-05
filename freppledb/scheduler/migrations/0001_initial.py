@@ -6,14 +6,15 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('input', '0071_operation_dependency_access'),
+        ('input', '__first__'),
     ]
 
     operations = [
         migrations.CreateModel(
             name='SchedulerConfiguration',
             fields=[
-                ('name', models.CharField(max_length=300, primary_key=True, serialize=False, verbose_name='name')),
+                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=300, serialize=False, verbose_name='name')),
                 ('scheduling_method', models.CharField(choices=[('forward', 'forward'), ('backward', 'backward')], default='forward', max_length=20, verbose_name='scheduling method')),
                 ('horizon_start', models.DateTimeField(blank=True, null=True, verbose_name='horizon start')),
                 ('horizon_end', models.DateTimeField(blank=True, null=True, verbose_name='horizon end')),
@@ -29,7 +30,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='SchedulingJob',
             fields=[
-                ('name', models.CharField(max_length=300, primary_key=True, serialize=False, verbose_name='name')),
+                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=300, serialize=False, verbose_name='name')),
                 ('start_date', models.DateTimeField(blank=True, null=True, verbose_name='start date')),
                 ('end_date', models.DateTimeField(blank=True, null=True, verbose_name='end date')),
                 ('status', models.CharField(choices=[('proposed', 'proposed'), ('confirmed', 'confirmed'), ('completed', 'completed')], default='proposed', max_length=20, verbose_name='status')),
