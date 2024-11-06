@@ -138,7 +138,7 @@ class SchedulerJobCreate(CreateView):
         return context
 
     def get_success_url(self):
-        return reverse('scheduler:schedulingjob_list')
+        return reverse('scheduler:scheduler_job_list')
 
 class SchedulerJobEdit(UpdateView):
     """排程作業編輯視圖"""
@@ -153,7 +153,7 @@ class SchedulerJobEdit(UpdateView):
         return context
 
     def get_success_url(self):
-        return reverse('scheduler:schedulingjob_list')
+        return reverse('scheduler:scheduler_job_list')
 
 class ExecuteSchedulingJob(View):
     """執行排程作業"""
