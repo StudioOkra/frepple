@@ -1,11 +1,20 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _
-from freppledb.common.report import GridReport, GridFieldText, GridFieldDateTime, GridFieldInteger
+from freppledb.common.report import (
+    GridReport,
+    GridFieldText,
+    GridFieldBool,
+    GridFieldDateTime,
+    GridFieldInteger,
+    GridFieldNumber,
+)
 from .models import SchedulingJob, SchedulerConfiguration
-from django.views.generic.edit import CreateView
+from django.views.generic.edit import CreateView, UpdateView
 from django.urls import reverse_lazy
-from .forms import SchedulingJobForm
+from .forms import SchedulingJobForm, SchedulerConfigurationForm
+from django.views import View
+from .tasks import execute_scheduling_job
 
 class GanttView(GridReport):
     """
@@ -75,6 +84,20 @@ class SchedulerJobList(GridReport):
         # 可選：添加自定義過濾邏輯
         return items
 
+class SchedulerConfigCreate(CreateView):
+    """排程配置建立視圖"""
+    model = SchedulerConfiguration
+    form_class = SchedulerConfigurationForm
+    template_name = 'scheduler/schedulerconfig_form.html'
+    success_url = reverse_lazy('scheduler_config_list')
+
+class SchedulerConfigUpdate(UpdateView):
+    """排程配置更新視圖"""
+    model = SchedulerConfiguration
+    form_class = SchedulerConfigurationForm
+    template_name = 'scheduler/schedulerconfig_form.html'
+    success_url = reverse_lazy('scheduler_config_list')
+
 class SchedulerConfigList(GridReport):
     """排程配置列表視圖"""
     title = _('Scheduler Configurations')
@@ -84,18 +107,120 @@ class SchedulerConfigList(GridReport):
     basequeryset = SchedulerConfiguration.objects.all()
     
     rows = (
-        GridFieldText('name', title=_('name')),
+        GridFieldText('name', title=_('name'), key=True, 
+                     formatter='detail', extra='"role":"scheduler_config"'),
+        GridFieldText('description', title=_('description')),
         GridFieldText('scheduling_method', title=_('scheduling method')),
         GridFieldText('objective', title=_('objective')),
         GridFieldDateTime('horizon_start', title=_('horizon start')),
         GridFieldDateTime('horizon_end', title=_('horizon end')),
         GridFieldInteger('time_limit', title=_('time limit')),
+        GridFieldBool('wip_consume_material', title=_('WIP consume material')),
+        GridFieldBool('wip_consume_capacity', title=_('WIP consume capacity')),
+        GridFieldText('setup_matrix', title=_('setup matrix')),
+        GridFieldNumber('size_minimum', title=_('minimum batch size')),
+        GridFieldNumber('size_multiple', title=_('multiple batch size')),
     )
     
     default_sort = (0, 'asc')
 
-class SchedulingJobCreate(CreateView):
+class SchedulerJobCreate(CreateView):
+    """排程作業建立視圖"""
     model = SchedulingJob
-    form_class = SchedulingJobForm
     template_name = 'scheduler/schedulingjob_form.html'
-    success_url = '/data/scheduler/jobs/'
+    title = _('新增排程作業')
+    
+    fields = [
+        'name',
+        'demand',
+        'operation',
+        'configuration',
+        'priority',
+        'status'
+    ]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = self.title
+        return context
+
+    def get_success_url(self):
+        return reverse('scheduler:schedulingjob_list')
+
+class SchedulerJobEdit(UpdateView):
+    """排程作業編輯視圖"""
+    model = SchedulingJob
+    template_name = 'scheduler/schedulingjob_form.html'
+    title = _('編輯排程作業')
+    fields = SchedulerJobCreate.fields
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = self.title
+        return context
+
+    def get_success_url(self):
+        return reverse('scheduler:schedulingjob_list')
+
+class ExecuteSchedulingJob(View):
+    """執行排程作業"""
+    def post(self, request, pk):
+        try:
+            job = SchedulingJob.objects.get(pk=pk)
+            
+            if not job.can_start():
+                return JsonResponse({
+                    'success': False,
+                    'message': _('Job cannot be started')
+                })
+            
+            execute_scheduling_job(pk)
+            
+            return JsonResponse({
+                'success': True,
+                'message': _('Job started successfully')
+            })
+            
+        except SchedulingJob.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': _('Job not found')
+            }, status=404)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': str(e)
+            }, status=500)
+
+class SchedulerConfigurationCreate(CreateView):
+    model = SchedulerConfiguration
+    template_name = 'scheduler/scheduler_configuration_form.html'
+    title = _('新增排程設定')
+    
+    # 定義表單欄位
+    fields = [
+        'name', 
+        'description',
+        'scheduling_method',
+        'objective',
+        'horizon_start',
+        'horizon_end',
+        'time_limit',
+        'wip_consume_material',
+        'wip_consume_capacity',
+        'wip_produce_full_quantity',
+        'size_minimum',
+        'size_multiple',
+        'fence_duration',
+        'batch_window',
+        'setup_matrix',
+        'consider_material',
+        'consider_capacity'
+    ]
+
+class SchedulerConfigurationEdit(UpdateView):
+    model = SchedulerConfiguration
+    template_name = 'scheduler/scheduler_configuration_form.html'
+    title = _('編輯排程設定')
+    fields = SchedulerConfigurationCreate.fields

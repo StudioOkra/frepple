@@ -1,9 +1,9 @@
-from django.db import models
 from django.utils.translation import gettext_lazy as _
-from freppledb.input.models import Resource, Operation, OperationPlan
+from freppledb.input.models import OperationPlan
 from ortools.sat.python import cp_model
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
+from django.db.models import Sum
 
 class SchedulerEngine:
     def __init__(self, configuration):
@@ -16,93 +16,95 @@ class SchedulerEngine:
         self.solver = cp_model.CpSolver()
         self.configuration = configuration
         self.operation_plans = []
-        self.resources = []
-        self.horizon_start = configuration.horizon_start or datetime.now()
-        self.horizon_end = configuration.horizon_end
         
-        # 添加優化目標相關屬性
-        self.objective_variables = []
-        self.objective_coefficients = []
+        # 根據排程方向設定時間範圍
+        if configuration.scheduling_method == 'backward':
+            self.horizon_end = configuration.horizon_end or datetime.now()
+            self.horizon_start = configuration.horizon_start
+        else:  # forward
+            self.horizon_start = configuration.horizon_start or datetime.now()
+            self.horizon_end = configuration.horizon_end
         
-        # 添加求解狀態追蹤
-        self.solution_status = None
-        self.solution_info = {}
+        # 設定求解器時間限制
+        self.solver.parameters.max_time_in_seconds = configuration.time_limit
+        
+        # 初始化變數
+        self.intervals = {}
+        self.start_vars = {}
+        self.end_vars = {}
         
         # 添加日誌記錄
         self.logger = logging.getLogger(__name__)
         
     def load_frepple_data(self):
         """載入 frepple 的資料"""
-        # 載入資源
-        self.resources = Resource.objects.all()
+        query = OperationPlan.objects.filter(status='proposed')
         
-        # 載入操作計劃
-        self.operation_plans = OperationPlan.objects.filter(
-            status='proposed'
-        ).select_related(
-            'operation',
-            'resource'
-        )
-        
+        # 根據 WIP 設定過濾
+        if not self.configuration.wip_consume_material:
+            query = query.exclude(status='confirmed')
+            
+        # 根據時間範圍過濾
         if self.horizon_start:
-            self.operation_plans = self.operation_plans.filter(
-                startdate__gte=self.horizon_start
-            )
+            query = query.filter(startdate__gte=self.horizon_start)
         if self.horizon_end:
-            self.operation_plans = self.operation_plans.filter(
-                enddate__lte=self.horizon_end
-            )
+            query = query.filter(enddate__lte=self.horizon_end)
+            
+        self.operation_plans = query.select_related('operation', 'demand')
         
     def build_model(self):
-        """建立 CP-SAT 模型"""
-        # 轉換時間到分鐘為單位
+        """建立生產排程模型"""
+        # 時間範圍轉換
         horizon_start_minutes = int(self.horizon_start.timestamp() / 60)
-        horizon_end_minutes = int(self.horizon_end.timestamp() / 60) if self.horizon_end else horizon_start_minutes + 60 * 24 * 30
+        horizon_end_minutes = int(self.horizon_end.timestamp() / 60)
         
-        # 根據排程方向設定變數範圍
-        is_forward = self.configuration.scheduling_method == 'forward'
-        
-        for opplan in self.operation_plans:
-            duration = int(opplan.operation.duration / 60)
+        for operation in self.operations:
+            # 建立操作變數
+            start_var = self.model.NewIntVar(
+                horizon_start_minutes,
+                horizon_end_minutes,
+                f'start_{operation.id}'
+            )
+            duration = int(operation.duration / 60)  # 轉換為分鐘
+            end_var = self.model.NewIntVar(
+                horizon_start_minutes,
+                horizon_end_minutes,
+                f'end_{operation.id}'
+            )
             
-            if is_forward:
-                # 前推排程：從最早開始時間往後排
-                start_min = horizon_start_minutes
-                start_max = horizon_end_minutes - duration
-                end_min = horizon_start_minutes + duration
-                end_max = horizon_end_minutes
+            # 根據排程方向設定約束
+            if self.configuration.scheduling_method == 'backward':
+                # 後排：從交期往前排
+                if operation.due_date:
+                    due_date_minutes = int(operation.due_date.timestamp() / 60)
+                    self.model.Add(end_var <= due_date_minutes)
             else:
-                # 後推排程：從最晚完工時間往前排
-                if hasattr(opplan, 'due_date'):
-                    due_date_minutes = int(opplan.due_date.timestamp() / 60)
-                    start_min = horizon_start_minutes
-                    start_max = due_date_minutes - duration
-                    end_min = horizon_start_minutes + duration
-                    end_max = due_date_minutes
-                else:
-                    # 如果沒有交期，使用排程範圍結束時間
-                    start_min = horizon_start_minutes
-                    start_max = horizon_end_minutes - duration
-                    end_min = horizon_start_minutes + duration
-                    end_max = horizon_end_minutes
-            
-            # 創建開始時間變數
-            opplan.start_var = self.model.NewIntVar(
-                start_min,
-                start_max,
-                f'start_{opplan.id}'
-            )
-            
-            # 創建結束時間變數
-            opplan.end_var = self.model.NewIntVar(
-                end_min,
-                end_max,
-                f'end_{opplan.id}'
-            )
+                # 前排：從最早可開始時間往後排
+                if operation.earliest_start:
+                    earliest_minutes = int(operation.earliest_start.timestamp() / 60)
+                    self.model.Add(start_var >= earliest_minutes)
             
             # 添加持續時間約束
-            self.model.Add(opplan.end_var == opplan.start_var + duration)
+            self.model.Add(end_var == start_var + duration)
             
+            # 保存變數供後續使用
+            self.start_vars[operation.id] = start_var
+            self.end_vars[operation.id] = end_var
+    
+    def find_batching_opportunities(self, operation):
+        """尋找批次機會"""
+        batch_start = operation.due_date - self.configuration.batch_window
+        batch_end = operation.due_date + self.configuration.batch_window
+        
+        similar_ops = self.operations.filter(
+            operation_type=operation.operation_type,
+            start_date__gte=batch_start,
+            end_date__lte=batch_end
+        )
+        
+        if similar_ops.exists():
+            self.create_batch_constraints(similar_ops)
+    
     def add_resource_constraints(self):
         """添加資源約束"""
         for resource in self.resources:
@@ -169,6 +171,19 @@ class SchedulerEngine:
                 resource_end = int(opplan.resource.available_until.timestamp() / 60)
                 self.model.Add(opplan.end_var <= resource_end)
             
+    def add_batch_constraints(self):
+        """添加批次約束"""
+        if self.configuration.size_minimum:
+            for op in self.operation_plans:
+                if hasattr(op, 'quantity'):
+                    self.model.Add(op.quantity >= float(self.configuration.size_minimum))
+                    
+        if self.configuration.size_multiple:
+            for op in self.operation_plans:
+                if hasattr(op, 'quantity'):
+                    multiple = float(self.configuration.size_multiple)
+                    self.model.Add(op.quantity % multiple == 0)
+            
     def set_objective(self):
         """設置優化目標"""
         if self.configuration.objective == 'makespan':
@@ -201,37 +216,83 @@ class SchedulerEngine:
             self.model.Add(total_weighted_completion == sum(weighted_vars))
             self.model.Minimize(total_weighted_completion)
             
+    def get_solution_info(self):
+        """獲取求解結果信息"""
+        if not self.solver.ObjectiveValue():
+            return None
+            
+        return {
+            'status': self.solver.StatusName(),
+            'objective_value': self.solver.ObjectiveValue(),
+            'wall_time': self.solver.WallTime(),
+            'branches': self.solver.NumBranches(),
+            'conflicts': self.solver.NumConflicts()
+        }
+    
     def solve(self):
         """執行求解"""
         try:
-            # 建立基本模型
+            self.load_frepple_data()
             self.build_model()
-            
-            # 添加各種約束
             self.add_resource_constraints()
             self.add_precedence_constraints()
             self.add_time_window_constraints()
             
-            # 設置優化目標
+            if self.configuration.size_minimum or self.configuration.size_multiple:
+                self.add_batch_constraints()
+                
             self.set_objective()
             
-            # 設定求解器參數
-            solver_params = cp_model.SatParameters()
-            solver_params.max_time_in_seconds = self.configuration.time_limit or 60
+            status = self.solver.Solve(self.model)
+            success = status == cp_model.OPTIMAL or status == cp_model.FEASIBLE
             
-            # 創建求解器並求解
-            solver = cp_model.CpSolver()
-            solver.parameters.CopyFrom(solver_params)
-            
-            status = solver.Solve(self.model)
-            
-            if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-                self._update_solution(solver)
-                return True
+            if success:
+                solution_info = self.get_solution_info()
+                self.logger.info(f"排程完成: {solution_info}")
+            else:
+                self.logger.warning(f"排程未找到可行解: {self.solver.StatusName()}")
                 
-            self.logger.warning(f"求解未找到可行解，狀態：{status}")
-            return False
+            return success
             
         except Exception as e:
-            self.logger.error(f"排程求解過程發生錯誤：{str(e)}")
-            raise
+            self.logger.error(f"排程求解錯誤: {str(e)}")
+            return False
+
+    def add_material_constraints(self):
+        """添加物料約束"""
+        for opplan in self.operation_plans:
+            # 獲取物料需求
+            material_requirements = opplan.operation.materials.all()
+            
+            for material in material_requirements:
+                # 檢查物料庫存
+                available_qty = material.buffer.onhand if hasattr(material.buffer, 'onhand') else 0
+                
+                # 如果是消耗物料
+                if material.type == 'consumption':
+                    required_qty = opplan.quantity * material.quantity
+                    
+                    # 檢查 WIP 設定
+                    if not self.configuration.wip_consume_material:
+                        wip_qty = self.get_wip_quantity(material.buffer)
+                        available_qty += wip_qty
+                        
+                    # 添加物料可用性約束
+                    self.model.Add(required_qty <= available_qty)
+                    
+                # 如果是產出物料
+                elif material.type == 'production':
+                    produced_qty = opplan.quantity * material.quantity
+                    
+                    # 檢查 WIP 設定
+                    if self.configuration.wip_produce_full_quantity:
+                        self.model.Add(produced_qty == material.quantity)
+
+    def get_wip_quantity(self, buffer):
+        """獲取 WIP 數量"""
+        return OperationPlan.objects.filter(
+            operation__materials__buffer=buffer,
+            status='confirmed'
+        ).aggregate(
+            total_qty=Sum('quantity')
+        )['total_qty'] or 0

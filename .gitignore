@@ -18,6 +18,7 @@
 dist
 build
 venv
+__pycache__
 
 # Log files
 *.log

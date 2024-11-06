@@ -17,3 +17,11 @@ menu.addItem(
     index=100,
     model=SchedulingJob,
 )
+menu.addItem(
+    "scheduler_menu",
+    "scheduler_config",
+    url="/data/scheduler/config/",
+    label=_("排程設定"),
+    index=200,
+    permission="scheduler.view_schedulerconfig",
+)

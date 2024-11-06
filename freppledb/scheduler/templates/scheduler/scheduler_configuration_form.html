@@ -9,11 +9,6 @@ $(function() {
     $('.datetimepicker').datetimepicker({
         format: 'YYYY-MM-DD HH:mm:ss'
     });
-
-    // 下拉選單使用 select2
-    $('.selectized').select2({
-        width: '100%'
-    });
 });
 </script>
 {% endblock %}
@@ -31,7 +26,7 @@ $(function() {
     <div class="col-md-12">
         <div class="card">
             <div class="card-body">
-                <form method="post" id="schedjob_form">
+                <form method="post" id="schedconfig_form">
                     {% csrf_token %}
                     {{ form.as_p }}
                     <div class="text-right">
