@@ -15,6 +15,19 @@ class SchedulerConfigurationForm(forms.ModelForm):
             'setup_matrix',
             'consider_material', 'consider_capacity'
         ]
+        widgets = {
+            'horizon_start': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'horizon_end': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            # 根據需要，您可以為其他時間相關字段添加 TimeInput 或 DateTimeInput
+        }
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -22,13 +35,17 @@ class SchedulerConfigurationForm(forms.ModelForm):
         for field_name, field in self.fields.items():
             if isinstance(field, forms.BooleanField):
                 field.widget.attrs['class'] = 'form-check-input'
+            elif isinstance(field, forms.DateInput) or isinstance(field, forms.TimeInput):
+                # 已經在 widgets 中設置了類別，不需要重複設定
+                pass
             elif isinstance(field, forms.DateTimeField):
                 field.widget = forms.DateTimeInput(
                     attrs={
-                        'class': 'form-control datetimepicker',
+                        'type': 'datetime-local',
+                        'class': 'form-control',
                         'autocomplete': 'off'
                     },
-                    format='%Y-%m-%d %H:%M:%S'
+                    format='%Y-%m-%dT%H:%M'
                 )
             else:
                 field.widget.attrs['class'] = 'form-control'
