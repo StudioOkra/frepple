@@ -36,8 +36,18 @@ class SchedulerConfiguration(models.Model):
     )
     
     # 時間範圍
-    horizon_start = models.DateTimeField(_('horizon start'), null=True, blank=True)
-    horizon_end = models.DateTimeField(_('horizon end'), null=True, blank=True)
+    horizon_start = models.DateTimeField(
+        _('horizon start'), 
+        null=True, 
+        blank=True,
+        help_text=_('Start date and time of scheduling horizon (YYYY-MM-DD HH:mm:ss)')
+    )
+    horizon_end = models.DateTimeField(
+        _('horizon end'), 
+        null=True, 
+        blank=True,
+        help_text=_('End date and time of scheduling horizon (YYYY-MM-DD HH:mm:ss)')
+    )
     
     # 求解器設定
     time_limit = models.IntegerField(
@@ -300,19 +310,19 @@ class SchedulingJob(AuditModel):
             # 更新開始和結束時間
             for opplan in engine.operation_plans:
                 start_time = datetime.fromtimestamp(
-                    engine.solver.Value(opplan.start_var) * 60
+                    engine.solver.Value(opplan.start_var)
                 )
                 end_time = datetime.fromtimestamp(
-                    engine.solver.Value(opplan.end_var) * 60
+                    engine.solver.Value(opplan.end_var)
                 )
                 
                 opplan.startdate = start_time
                 opplan.enddate = end_time
                 opplan.save()
                 
-            # 更新作業時間
-            self.start_date = min(op.startdate for op in engine.operation_plans)
-            self.end_date = max(op.enddate for op in engine.operation_plans)
+            # 更新作業時間（確保使用秒為單位）
+            self.start_date = datetime.fromtimestamp(min(op.start_var for op in engine.operation_plans))
+            self.end_date = datetime.fromtimestamp(max(op.end_var for op in engine.operation_plans))
             self.save()
             
             return True

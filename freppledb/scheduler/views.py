@@ -8,13 +8,15 @@ from freppledb.common.report import (
     GridFieldDateTime,
     GridFieldInteger,
     GridFieldNumber,
+    GridFieldDuration,
 )
 from .models import SchedulingJob, SchedulerConfiguration
 from django.views.generic.edit import CreateView, UpdateView
-from django.urls import reverse_lazy
-from .forms import SchedulingJobForm, SchedulerConfigurationForm
 from django.views import View
 from .tasks import execute_scheduling_job
+from django.utils.translation import gettext_lazy as _
+from django.urls import reverse
+from .forms.scheduler_config import SchedulerConfigurationForm
 
 class GanttView(GridReport):
     """
@@ -84,26 +86,12 @@ class SchedulerJobList(GridReport):
         # 可選：添加自定義過濾邏輯
         return items
 
-class SchedulerConfigCreate(CreateView):
-    """排程配置建立視圖"""
-    model = SchedulerConfiguration
-    form_class = SchedulerConfigurationForm
-    template_name = 'scheduler/schedulerconfig_form.html'
-    success_url = reverse_lazy('scheduler_config_list')
-
-class SchedulerConfigUpdate(UpdateView):
-    """排程配置更新視圖"""
-    model = SchedulerConfiguration
-    form_class = SchedulerConfigurationForm
-    template_name = 'scheduler/schedulerconfig_form.html'
-    success_url = reverse_lazy('scheduler_config_list')
-
 class SchedulerConfigList(GridReport):
     """排程配置列表視圖"""
     title = _('Scheduler Configurations')
     model = SchedulerConfiguration
     template = 'scheduler/schedulerconfig_list.html'
-    
+        
     basequeryset = SchedulerConfiguration.objects.all()
     
     rows = (
@@ -120,6 +108,11 @@ class SchedulerConfigList(GridReport):
         GridFieldText('setup_matrix', title=_('setup matrix')),
         GridFieldNumber('size_minimum', title=_('minimum batch size')),
         GridFieldNumber('size_multiple', title=_('multiple batch size')),
+        GridFieldBool('wip_produce_full_quantity', title=_('WIP produce full quantity')),
+        GridFieldDuration('fence_duration', title=_('time fence')),
+        GridFieldDuration('batch_window', title=_('batch window')),
+        GridFieldBool('consider_material', title=_('consider material')),
+        GridFieldBool('consider_capacity', title=_('consider capacity')),
     )
     
     default_sort = (0, 'asc')
@@ -194,33 +187,16 @@ class ExecuteSchedulingJob(View):
             }, status=500)
 
 class SchedulerConfigurationCreate(CreateView):
+    """排程配置建立視圖"""
+    title = _('新增排程配置')
     model = SchedulerConfiguration
-    template_name = 'scheduler/scheduler_configuration_form.html'
-    title = _('新增排程設定')
-    
-    # 定義表單欄位
-    fields = [
-        'name', 
-        'description',
-        'scheduling_method',
-        'objective',
-        'horizon_start',
-        'horizon_end',
-        'time_limit',
-        'wip_consume_material',
-        'wip_consume_capacity',
-        'wip_produce_full_quantity',
-        'size_minimum',
-        'size_multiple',
-        'fence_duration',
-        'batch_window',
-        'setup_matrix',
-        'consider_material',
-        'consider_capacity'
-    ]
+    template_name = 'scheduler/schedulerconfig_form.html'
+    form_class = SchedulerConfigurationForm
 
-class SchedulerConfigurationEdit(UpdateView):
-    model = SchedulerConfiguration
-    template_name = 'scheduler/scheduler_configuration_form.html'
-    title = _('編輯排程設定')
-    fields = SchedulerConfigurationCreate.fields
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = self.title
+        return context
+
+    def get_success_url(self):
+        return reverse('scheduler:scheduler_config_list')

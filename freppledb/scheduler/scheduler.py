@@ -1,7 +1,7 @@
 from django.utils.translation import gettext_lazy as _
 from freppledb.input.models import OperationPlan
 from ortools.sat.python import cp_model
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from django.db.models import Sum
 
@@ -54,21 +54,21 @@ class SchedulerEngine:
         
     def build_model(self):
         """建立生產排程模型"""
-        # 時間範圍轉換
-        horizon_start_minutes = int(self.horizon_start.timestamp() / 60)
-        horizon_end_minutes = int(self.horizon_end.timestamp() / 60)
+        # 時間範圍轉換為秒（frepple 使用秒作為基本單位）
+        horizon_start_seconds = int(self.horizon_start.timestamp())
+        horizon_end_seconds = int(self.horizon_end.timestamp())
         
         for operation in self.operations:
             # 建立操作變數
             start_var = self.model.NewIntVar(
-                horizon_start_minutes,
-                horizon_end_minutes,
+                horizon_start_seconds,
+                horizon_end_seconds,
                 f'start_{operation.id}'
             )
-            duration = int(operation.duration / 60)  # 轉換為分鐘
+            duration = int(operation.duration)
             end_var = self.model.NewIntVar(
-                horizon_start_minutes,
-                horizon_end_minutes,
+                horizon_start_seconds,
+                horizon_end_seconds,
                 f'end_{operation.id}'
             )
             
@@ -76,13 +76,13 @@ class SchedulerEngine:
             if self.configuration.scheduling_method == 'backward':
                 # 後排：從交期往前排
                 if operation.due_date:
-                    due_date_minutes = int(operation.due_date.timestamp() / 60)
-                    self.model.Add(end_var <= due_date_minutes)
+                    due_date_seconds = int(operation.due_date.timestamp())
+                    self.model.Add(end_var <= due_date_seconds)
             else:
                 # 前排：從最早可開始時間往後排
                 if operation.earliest_start:
-                    earliest_minutes = int(operation.earliest_start.timestamp() / 60)
-                    self.model.Add(start_var >= earliest_minutes)
+                    earliest_seconds = int(operation.earliest_start.timestamp())
+                    self.model.Add(start_var >= earliest_seconds)
             
             # 添加持續時間約束
             self.model.Add(end_var == start_var + duration)
@@ -93,8 +93,10 @@ class SchedulerEngine:
     
     def find_batching_opportunities(self, operation):
         """尋找批次機會"""
-        batch_start = operation.due_date - self.configuration.batch_window
-        batch_end = operation.due_date + self.configuration.batch_window
+        # 將 batch_window 轉換為秒
+        batch_window_seconds = int(self.configuration.batch_window.total_seconds())
+        batch_start = operation.due_date - timedelta(seconds=batch_window_seconds)
+        batch_end = operation.due_date + timedelta(seconds=batch_window_seconds)
         
         similar_ops = self.operations.filter(
             operation_type=operation.operation_type,
@@ -113,31 +115,28 @@ class SchedulerEngine:
             
             for opplan in self.operation_plans:
                 if opplan.resource == resource:
-                    # 計算資源需求量
-                    load_quantity = opplan.quantity * opplan.operation.resource_qty
-                    
+                    # 使用 frepple 的資源負載計算
+                    load = opplan.operation.get_resource_load(resource)
+                    if not load:
+                        continue
+                        
                     interval = self.model.NewIntervalVar(
                         opplan.start_var,
-                        int(opplan.operation.duration / 60),
+                        int(load.duration),  # frepple 已經使用秒為單位
                         opplan.end_var,
                         f'interval_{opplan.id}'
                     )
                     
                     intervals.append(interval)
-                    demands.append(load_quantity)
+                    demands.append(load.quantity)
             
-            # 添加資源容量約束
             if intervals:
-                if resource.maximum is not None:
-                    self.model.AddCumulative(
-                        intervals,
-                        demands,
-                        resource.maximum
-                    )
+                capacity = resource.maximum or resource.get_capacity()
+                if capacity:
+                    self.model.AddCumulative(intervals, demands, capacity)
                 else:
-                    # 如果沒有最大容量限制，則確保不重疊
                     self.model.AddNoOverlap(intervals)
-                    
+    
     def add_precedence_constraints(self):
         """添加優先順序約束"""
         for opplan in self.operation_plans:
@@ -155,60 +154,67 @@ class SchedulerEngine:
         for opplan in self.operation_plans:
             # 檢查操作是否有時間窗口限制
             if hasattr(opplan.operation, 'time_window_start') and opplan.operation.time_window_start:
-                window_start = int(opplan.operation.time_window_start.timestamp() / 60)
+                window_start = int(opplan.operation.time_window_start.timestamp())
                 self.model.Add(opplan.start_var >= window_start)
                 
             if hasattr(opplan.operation, 'time_window_end') and opplan.operation.time_window_end:
-                window_end = int(opplan.operation.time_window_end.timestamp() / 60)
+                window_end = int(opplan.operation.time_window_end.timestamp())
                 self.model.Add(opplan.end_var <= window_end)
                 
             # 檢查資源可用時間
             if opplan.resource and hasattr(opplan.resource, 'available_from'):
-                resource_start = int(opplan.resource.available_from.timestamp() / 60)
+                resource_start = int(opplan.resource.available_from.timestamp())
                 self.model.Add(opplan.start_var >= resource_start)
                 
             if opplan.resource and hasattr(opplan.resource, 'available_until'):
-                resource_end = int(opplan.resource.available_until.timestamp() / 60)
+                resource_end = int(opplan.resource.available_until.timestamp())
                 self.model.Add(opplan.end_var <= resource_end)
             
     def add_batch_constraints(self):
         """添加批次約束"""
-        if self.configuration.size_minimum:
-            for op in self.operation_plans:
-                if hasattr(op, 'quantity'):
-                    self.model.Add(op.quantity >= float(self.configuration.size_minimum))
-                    
-        if self.configuration.size_multiple:
-            for op in self.operation_plans:
-                if hasattr(op, 'quantity'):
-                    multiple = float(self.configuration.size_multiple)
-                    self.model.Add(op.quantity % multiple == 0)
+        for op in self.operation_plans:
+            if not hasattr(op, 'quantity'):
+                continue
             
+            # 使用 frepple 的批次設定
+            operation = op.operation
+            if operation.batch:
+                # 最小批量
+                if self.configuration.size_minimum:
+                    min_size = max(float(self.configuration.size_minimum), 
+                                 operation.batch.minimumsize)
+                    self.model.Add(op.quantity >= min_size)
+                
+                # 批量倍數
+                if self.configuration.size_multiple:
+                    multiple = operation.batch.multiple or float(self.configuration.size_multiple)
+                    self.model.Add(op.quantity % multiple == 0)
+    
     def set_objective(self):
         """設置優化目標"""
         if self.configuration.objective == 'makespan':
             # 最小化完工時間
-            makespan = self.model.NewIntVar(0, self.horizon_end_minutes, 'makespan')
+            makespan = self.model.NewIntVar(0, self.horizon_end_seconds, 'makespan')
             for opplan in self.operation_plans:
                 self.model.Add(makespan >= opplan.end_var)
             self.model.Minimize(makespan)
             
         elif self.configuration.objective == 'tardiness':
             # 最小化延遲時間
-            total_tardiness = self.model.NewIntVar(0, self.horizon_end_minutes * len(self.operation_plans), 'total_tardiness')
+            total_tardiness = self.model.NewIntVar(0, self.horizon_end_seconds * len(self.operation_plans), 'total_tardiness')
             tardiness_vars = []
             for opplan in self.operation_plans:
                 if hasattr(opplan, 'due_date'):
-                    tardiness = self.model.NewIntVar(0, self.horizon_end_minutes, f'tardiness_{opplan.id}')
-                    due_date_minutes = int(opplan.due_date.timestamp() / 60)
-                    self.model.Add(tardiness >= opplan.end_var - due_date_minutes)
+                    tardiness = self.model.NewIntVar(0, self.horizon_end_seconds, f'tardiness_{opplan.id}')
+                    due_date_seconds = int(opplan.due_date.timestamp())
+                    self.model.Add(tardiness >= opplan.end_var - due_date_seconds)
                     tardiness_vars.append(tardiness)
             self.model.Add(total_tardiness == sum(tardiness_vars))
             self.model.Minimize(total_tardiness)
             
         elif self.configuration.objective == 'priority':
             # 基於優先級的優化
-            total_weighted_completion = self.model.NewIntVar(0, self.horizon_end_minutes * len(self.operation_plans), 'total_weighted_completion')
+            total_weighted_completion = self.model.NewIntVar(0, self.horizon_end_seconds * len(self.operation_plans), 'total_weighted_completion')
             weighted_vars = []
             for opplan in self.operation_plans:
                 weight = opplan.priority if hasattr(opplan, 'priority') else 1

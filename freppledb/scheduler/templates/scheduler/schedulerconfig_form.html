@@ -1,144 +1,65 @@
-{% extends "admin/base_site.html" %}
+{% extends "admin/base_site_grid.html" %}
 {% load i18n %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<!-- 引入 Select2 CSS -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<!-- 引入 Select2 JavaScript -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // 初始化 Select2
+    $('.selectized').select2({
+        width: '100%'
+    });
+});
+</script>
+{% endblock %}
+
+{% block content_title %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>{% if title %}{{ title }}{% endif %}</h1>
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center mt-4">
-  <div class="col-md-8">
-    <div class="card">
-      <div class="card-header">
-        <h5 class="card-title mb-0">{% trans "排程配置" %}</h5>
-      </div>
-      <div class="card-body">
-        <form method="post" class="form">
-          {% csrf_token %}
-          
-          {# 基本資訊 #}
-          <div class="mb-4">
-            <h6 class="text-muted">{% trans "基本資訊" %}</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                {{ form.name.label_tag }}
-                {{ form.name }}
-                {{ form.name.errors }}
-              </div>
-              <div class="col-12">
-                {{ form.description.label_tag }}
-                {{ form.description }}
-                {{ form.description.errors }}
-              </div>
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">{% trans "排程配置表單" %}</h5>
             </div>
-          </div>
-          
-          {# 排程設定 #}
-          <div class="mb-4">
-            <h6 class="text-muted">{% trans "排程設定" %}</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                {{ form.scheduling_method.label_tag }}
-                {{ form.scheduling_method }}
-                {{ form.scheduling_method.errors }}
-              </div>
-              <div class="col-md-6">
-                {{ form.objective.label_tag }}
-                {{ form.objective }}
-                {{ form.objective.errors }}
-              </div>
+            <div class="card-body">
+                <form method="post" id="schedconfig_form">
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% if field.help_text %}
+                                <small class="form-text text-muted">{{ field.help_text }}</small>
+                            {% endif %}
+                            {% for error in field.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">
+                            {% trans "儲存" %}
+                        </button>
+                    </div>
+                </form>
             </div>
-          </div>
-          
-          {# 時間設定 #}
-          <div class="mb-4">
-            <h6 class="text-muted">{% trans "時間設定" %}</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                {{ form.horizon_start.label_tag }}
-                {{ form.horizon_start }}
-                {{ form.horizon_start.errors }}
-              </div>
-              <div class="col-md-6">
-                {{ form.horizon_end.label_tag }}
-                {{ form.horizon_end }}
-                {{ form.horizon_end.errors }}
-              </div>
-              <div class="col-md-6">
-                {{ form.time_limit.label_tag }}
-                {{ form.time_limit }}
-                {{ form.time_limit.errors }}
-                {% if form.time_limit.help_text %}
-                <div class="form-text">{{ form.time_limit.help_text }}</div>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-          
-          {# WIP 設定 #}
-          <div class="mb-4">
-            <h6 class="text-muted">{% trans "WIP 設定" %}</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <div class="form-check">
-                  {{ form.wip_consume_material }}
-                  {{ form.wip_consume_material.label_tag }}
-                  {% if form.wip_consume_material.help_text %}
-                  <div class="form-text">{{ form.wip_consume_material.help_text }}</div>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="form-check">
-                  {{ form.wip_consume_capacity }}
-                  {{ form.wip_consume_capacity.label_tag }}
-                  {% if form.wip_consume_capacity.help_text %}
-                  <div class="form-text">{{ form.wip_consume_capacity.help_text }}</div>
-                  {% endif %}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {# 批次設定 #}
-          <div class="mb-4">
-            <h6 class="text-muted">{% trans "批次設定" %}</h6>
-            <div class="row g-3">
-              <div class="col-md-6">
-                {{ form.size_minimum.label_tag }}
-                {{ form.size_minimum }}
-                {{ form.size_minimum.errors }}
-              </div>
-              <div class="col-md-6">
-                {{ form.size_multiple.label_tag }}
-                {{ form.size_multiple }}
-                {{ form.size_multiple.errors }}
-              </div>
-            </div>
-          </div>
-          
-          <div class="d-flex justify-content-end mt-4">
-            <a href="{% url 'scheduler_config_list' %}" class="btn btn-secondary me-2">
-              {% trans "取消" %}
-            </a>
-            <button type="submit" class="btn btn-primary">
-              {% trans "儲存" %}
-            </button>
-          </div>
-        </form>
-      </div>
+        </div>
     </div>
-  </div>
 </div>
-
-<style>
-.form-control, .form-select {
-  max-width: 100%;
-  background-color: #fff;
-  border: 1px solid #ced4da;
-}
-.card {
-  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-.card-header {
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
-}
-</style>
 {% endblock %} 
