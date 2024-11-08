@@ -71,4 +71,5 @@ urlpatterns += [
     ),
     re_path(r"^data/", data_site.urls),
     re_path(r"^api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    re_path(r"^scheduler/", include("freppledb.scheduler.urls")),
 ]
