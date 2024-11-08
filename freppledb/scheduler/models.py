@@ -5,10 +5,11 @@ from freppledb.input.models import Operation, Resource
 from django.core.exceptions import ValidationError
 from datetime import datetime
 from django.utils import timezone
+from .scheduler import SchedulerEngine
 
 class SchedulerConfiguration(models.Model):
     """生產排程配置模型"""
-    name = models.CharField(_('name'), max_length=300)
+    name = models.CharField(_('name'), max_length=300, unique=True)
     description = models.TextField(_('description'), blank=True, null=True)
     
     # 排程方向
@@ -53,7 +54,7 @@ class SchedulerConfiguration(models.Model):
     time_limit = models.IntegerField(
         _('time limit (seconds)'),
         default=60,
-        help_text=_('Maximum time allowed for solving')
+        help_text=_('Time limit for the scheduler in seconds')
     )
     
     # WIP 相關設定
@@ -159,7 +160,7 @@ class SchedulingJob(AuditModel):
         ('cancelled', _('Cancelled'))
     ]
     
-    name = models.CharField(_('name'), max_length=300)
+    name = models.CharField(_('name'), max_length=255, unique=True)
     demand = models.ForeignKey(
         'input.Demand',
         verbose_name=_('demand'),
