@@ -91,7 +91,7 @@ class SchedulerConfigList(GridReport):
     title = _('Scheduler Configurations')
     model = SchedulerConfiguration
     template = 'scheduler/schedulerconfig_list.html'
-        
+    
     basequeryset = SchedulerConfiguration.objects.all()
     
     rows = (
@@ -192,6 +192,22 @@ class SchedulerConfigurationCreate(CreateView):
     model = SchedulerConfiguration
     template_name = 'scheduler/schedulerconfig_form.html'
     form_class = SchedulerConfigurationForm
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = self.title
+        return context
+
+    def get_success_url(self):
+        return reverse('scheduler:scheduler_config_list')
+
+class SchedulerConfigurationEdit(UpdateView):
+    """排程配置編輯視圖"""
+    model = SchedulerConfiguration
+    template_name = 'scheduler/schedulerconfig_form.html'
+    title = _('編輯排程配置')
+    form_class = SchedulerConfigurationForm  # 使用自定義表單類
+    # 使用默認的 pk 查找，無需指定 slug_field 和 slug_url_kwarg
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
