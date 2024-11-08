@@ -251,24 +251,22 @@ class SchedulingJob(AuditModel):
             message=message
         )
         
+    @property
     def can_start(self):
-        """檢查是否可以開始排程"""
-        if self.status not in ['draft', 'failed']:
-            return False
-            
-        # 檢查必要欄位
-        if not all([self.demand, self.operation, self.configuration]):
-            return False
-            
-        # 檢查需求狀態
-        if self.demand.status not in ['open', 'quote']:
-            return False
-            
-        return True
-        
+        """
+        定義排程作業是否可執行的邏輯。
+        根據您的業務需求調整此方法。
+        """
+        return (
+            self.status in ['draft', 'failed'] and
+            self.demand and self.demand.status in ['open', 'quote'] and
+            self.operation and
+            self.configuration
+        )
+    
     def execute(self):
         """執行排程作業"""
-        if not self.can_start():
+        if not self.can_start:
             raise ValueError("Job cannot be started")
             
         try:

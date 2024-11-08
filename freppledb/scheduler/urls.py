@@ -1,8 +1,11 @@
 from django.urls import re_path
 from .views import (
-    SchedulerConfigList, SchedulerJobList,
-    SchedulerJobCreate, ExecuteSchedulingJob,
-    SchedulerJobEdit, SchedulerConfigurationCreate,
+    SchedulerJobList,
+    SchedulerJobCreate,
+    SchedulerJobEdit,
+    ExecuteSchedulingJob,
+    SchedulerConfigList,
+    SchedulerConfigurationCreate,
     SchedulerConfigurationEdit
 )
 
@@ -15,13 +18,11 @@ urlpatterns = [
     # 排程作業相關 URL
     re_path(r'^data/scheduler/jobs/$', SchedulerJobList.as_view(), name='scheduler_job_list'),
     re_path(r'^data/scheduler/schedulingjob/add/$', SchedulerJobCreate.as_view(), name='schedulingjob_add'),
-    re_path(r'^schedulingjob/(?P<pk>\d+)/edit/$', SchedulerJobEdit.as_view(), name='schedulingjob_edit'),
-    re_path(r'^execute/(?P<pk>\d+)/$', ExecuteSchedulingJob.as_view(), name='execute_scheduling_job'),
+    re_path(r'^detail/scheduler_job/(?P<pk>\d+)/$', SchedulerJobEdit.as_view(), name='schedulingjob_edit'),
+    re_path(r'^data/scheduler/schedulingjob/execute/(?P<pk>\d+)/$', ExecuteSchedulingJob.as_view(), name='execute_scheduling_job'),
     
     # 排程配置相關 URL
     re_path(r'^data/scheduler/config/$', SchedulerConfigList.as_view(), name='scheduler_config_list'),
     re_path(r'^data/scheduler/schedulerconfiguration/add/$', SchedulerConfigurationCreate.as_view(), name='schedulerconfiguration_add'),
-    
-    # 調整後的 SchedulerConfigurationEdit 路由，使用 pk 作為參數
-    re_path(r'^detail/scheduler_config/<str:pk>/$', SchedulerConfigurationEdit.as_view(), name='scheduler_configuration_edit'),
+    re_path(r'^detail/scheduler_config/(?P<pk>.+)/$', SchedulerConfigurationEdit.as_view(), name='scheduler_configuration_edit'),
 ]

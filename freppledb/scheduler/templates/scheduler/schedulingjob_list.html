@@ -9,7 +9,8 @@ function executeJob(jobId) {
         method: 'POST',
         headers: {
             'X-CSRFToken': getCookie('csrftoken'),
-        }
+            'Content-Type': 'application/json'
+        },
     })
     .then(response => response.json())
     .then(data => {
@@ -24,31 +25,25 @@ function executeJob(jobId) {
         showMessage('錯誤', '執行時發生錯誤：' + error, false);
     });
 }
-</script>
-{% endblock %}
 
-{% block grid %}
-{{ block.super }}
-<script>
-grid.addFormatter({
-    executeButton: function(cellvalue, options, rowdata) {
-        if (rowdata.can_start) {
-            return `<button class="btn btn-primary btn-sm" onclick="executeJob(${rowdata.id})">執行排程</button>`;
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
         }
-        return `<button class="btn btn-primary btn-sm" disabled>執行排程</button>`;
     }
-});
+    return cookieValue;
+}
 
-// 在 columns 定義中加入執行按鈕欄位
-var extraColumns = [{
-    name: 'actions',
-    label: '{% trans "操作" %}',
-    width: 80,
-    align: 'center',
-    formatter: 'executeButton',
-    sortable: false,
-    search: false
-}];
+function showMessage(title, message, success) {
+    alert(`${title}: ${message}`);
+}
 
 grid.extraColumns = extraColumns;
 </script>

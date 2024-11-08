@@ -69,14 +69,16 @@ class SchedulerJobList(GridReport):
     
     # 定義欄位格式
     rows = (
-        GridFieldText('name', title=_('name')),
-        GridFieldText('operation', title=_('operation')),
-        GridFieldDateTime('start_date', title=_('start date')),
-        GridFieldDateTime('end_date', title=_('end date')),
-        GridFieldText('status', title=_('status')),
-        GridFieldInteger('sequence', title=_('sequence')),
-        GridFieldInteger('priority', title=_('priority')),
-        GridFieldText('configuration', title=_('configuration')),
+        GridFieldInteger('id', title=_('ID'), key=True, formatter='detail', extra='"role":"scheduler_job"'),
+        GridFieldText('name', title=_('Name')),
+        GridFieldText('operation', title=_('Operation')),
+        GridFieldDateTime('start_date', title=_('Start Date')),
+        GridFieldDateTime('end_date', title=_('End Date')),
+        GridFieldText('status', title=_('Status')),
+        GridFieldInteger('sequence', title=_('Sequence')),
+        GridFieldInteger('priority', title=_('Priority')),
+        GridFieldText('configuration', title=_('Configuration')),
+        GridFieldText('can_start', title=_('Can Start'), formatter='executeButton'),  # 新增按鈕欄位
     )
     
     default_sort = (0, 'asc')
@@ -95,8 +97,8 @@ class SchedulerConfigList(GridReport):
     basequeryset = SchedulerConfiguration.objects.all()
     
     rows = (
-        GridFieldText('name', title=_('name'), key=True, 
-                     formatter='detail', extra='"role":"scheduler_config"'),
+        GridFieldInteger('id', title=_('ID'), key=True, formatter='detail', extra='"role":"scheduler_config"'),
+        GridFieldText('name', title=_('name')),
         GridFieldText('description', title=_('description')),
         GridFieldText('scheduling_method', title=_('scheduling method')),
         GridFieldText('objective', title=_('objective')),
@@ -161,7 +163,7 @@ class ExecuteSchedulingJob(View):
         try:
             job = SchedulingJob.objects.get(pk=pk)
             
-            if not job.can_start():
+            if not job.can_start:
                 return JsonResponse({
                     'success': False,
                     'message': _('Job cannot be started')
@@ -207,7 +209,6 @@ class SchedulerConfigurationEdit(UpdateView):
     template_name = 'scheduler/schedulerconfig_form.html'
     title = _('編輯排程配置')
     form_class = SchedulerConfigurationForm  # 使用自定義表單類
-    # 使用默認的 pk 查找，無需指定 slug_field 和 slug_url_kwarg
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
