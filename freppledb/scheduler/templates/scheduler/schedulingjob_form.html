@@ -4,17 +4,46 @@
 {% block extrahead %}
 {{ block.super }}
 <script>
-$(function() {
-    // 日期時間選擇器初始化
-    $('.datetimepicker').datetimepicker({
-        format: 'YYYY-MM-DD HH:mm:ss'
+function executeJob(jobId) {
+    fetch(`/scheduler/execute/${jobId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage('成功', '排程作業已開始執行', true);
+            window.location.reload();
+        } else {
+            showMessage('錯誤', '執行失敗：' + data.message, false);
+        }
+    })
+    .catch(error => {
+        showMessage('錯誤', '執行時發生錯誤：' + error, false);
     });
+}
 
-    // 下拉選單使用 select2
-    $('.selectized').select2({
-        width: '100%'
-    });
-});
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showMessage(title, message, success) {
+    alert(`${title}: ${message}`);
+}
 </script>
 {% endblock %}
 
@@ -36,6 +65,7 @@ $(function() {
                     {{ form.as_p }}
                     <div class="text-right">
                         <input type="submit" value="{% trans '儲存' %}" class="btn btn-primary"/>
+                        <button type="button" class="btn btn-success" onclick="executeJob({{ form.instance.id }})">執行</button>
                     </div>
                 </form>
             </div>

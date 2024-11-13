@@ -19,7 +19,7 @@ urlpatterns = [
     re_path(r'^data/scheduler/jobs/$', SchedulerJobList.as_view(), name='scheduler_job_list'),
     re_path(r'^data/scheduler/schedulingjob/add/$', SchedulerJobCreate.as_view(), name='schedulingjob_add'),
     re_path(r'^detail/scheduler_job/(?P<pk>\d+)/$', SchedulerJobEdit.as_view(), name='schedulingjob_edit'),
-    re_path(r'^data/scheduler/schedulingjob/execute/(?P<pk>\d+)/$', ExecuteSchedulingJob.as_view(), name='execute_scheduling_job'),
+    re_path(r'^scheduler/execute/(?P<pk>\d+)/$', ExecuteSchedulingJob.as_view(), name='execute_scheduling_job'),
     
     # 排程配置相關 URL
     re_path(r'^data/scheduler/config/$', SchedulerConfigList.as_view(), name='scheduler_config_list'),
