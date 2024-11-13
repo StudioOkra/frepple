@@ -1,5 +1,5 @@
 from django.utils.translation import gettext_lazy as _
-from freppledb.input.models import OperationPlan
+from freppledb.input.models import OperationPlan, Resource
 from ortools.sat.python import cp_model
 from datetime import datetime, timedelta
 import logging
@@ -16,6 +16,8 @@ class SchedulerEngine:
         self.solver = cp_model.CpSolver()
         self.configuration = configuration
         self.operation_plans = []
+        self.operations = []
+        self.resources = []
         
         # 根據排程方向設定時間範圍
         if configuration.scheduling_method == 'backward':
@@ -24,6 +26,9 @@ class SchedulerEngine:
         else:  # forward
             self.horizon_start = configuration.horizon_start or datetime.now()
             self.horizon_end = configuration.horizon_end
+        
+        self.horizon_start_seconds = int(self.horizon_start.timestamp())
+        self.horizon_end_seconds = int(self.horizon_end.timestamp())
         
         # 設定求解器時間限制
         self.solver.parameters.max_time_in_seconds = configuration.time_limit
@@ -51,24 +56,26 @@ class SchedulerEngine:
             query = query.filter(enddate__lte=self.horizon_end)
             
         self.operation_plans = query.select_related('operation', 'demand')
+        self.operations = self.operation_plans.values_list('operation', flat=True).distinct()
         
+        # 獲取可用資源，這裡假設使用 maximum 欄位
+        self.resources = Resource.objects.filter(maximum__gt=0)
+    
     def build_model(self):
         """建立生產排程模型"""
-        # 時間範圍轉換為秒（frepple 使用秒作為基本單位）
-        horizon_start_seconds = int(self.horizon_start.timestamp())
-        horizon_end_seconds = int(self.horizon_end.timestamp())
-        
         for operation in self.operations:
+            self.logger.info(f"處理操作: {operation.id}")
+            
             # 建立操作變數
             start_var = self.model.NewIntVar(
-                horizon_start_seconds,
-                horizon_end_seconds,
+                self.horizon_start_seconds,
+                self.horizon_end_seconds,
                 f'start_{operation.id}'
             )
             duration = int(operation.duration)
             end_var = self.model.NewIntVar(
-                horizon_start_seconds,
-                horizon_end_seconds,
+                self.horizon_start_seconds,
+                self.horizon_end_seconds,
                 f'end_{operation.id}'
             )
             
@@ -78,14 +85,17 @@ class SchedulerEngine:
                 if operation.due_date:
                     due_date_seconds = int(operation.due_date.timestamp())
                     self.model.Add(end_var <= due_date_seconds)
+                    self.logger.info(f"添加約束: {end_var} <= {due_date_seconds}")
             else:
                 # 前排：從最早可開始時間往後排
                 if operation.earliest_start:
                     earliest_seconds = int(operation.earliest_start.timestamp())
                     self.model.Add(start_var >= earliest_seconds)
+                    self.logger.info(f"添加約束: {start_var} >= {earliest_seconds}")
             
             # 添加持續時間約束
             self.model.Add(end_var == start_var + duration)
+            self.logger.info(f"添加持續時間約束: {end_var} == {start_var} + {duration}")
             
             # 保存變數供後續使用
             self.start_vars[operation.id] = start_var
@@ -238,18 +248,31 @@ class SchedulerEngine:
     def solve(self):
         """執行求解"""
         try:
+            self.logger.info("開始加載 Frepple 數據")
             self.load_frepple_data()
+            
+            self.logger.info("開始建立排程模型")
             self.build_model()
+            
+            self.logger.info("開始添加資源約束")
             self.add_resource_constraints()
+            
+            self.logger.info("開始添加優先順序約束")
             self.add_precedence_constraints()
+            
+            self.logger.info("開始添加時間窗口約束")
             self.add_time_window_constraints()
             
             if self.configuration.size_minimum or self.configuration.size_multiple:
+                self.logger.info("開始添加批次約束")
                 self.add_batch_constraints()
-                
+            
+            self.logger.info("開始設定目標")
             self.set_objective()
             
+            self.logger.info("開始求解模型")
             status = self.solver.Solve(self.model)
+            
             success = status == cp_model.OPTIMAL or status == cp_model.FEASIBLE
             
             if success:
@@ -257,7 +280,7 @@ class SchedulerEngine:
                 self.logger.info(f"排程完成: {solution_info}")
             else:
                 self.logger.warning(f"排程未找到可行解: {self.solver.StatusName()}")
-                
+            
             return success
             
         except Exception as e:
