@@ -3,48 +3,5 @@
 
 {% block extrahead %}
 {{ block.super }}
-<script>
-function executeJob(jobId) {
-    fetch(`${url_prefix}/scheduler/execute/${jobId}/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
-            'Content-Type': 'application/json'
-        },
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showMessage('成功', '排程作業已開始執行', true);
-            window.location.reload();
-        } else {
-            showMessage('錯誤', '執行失敗：' + data.message, false);
-        }
-    })
-    .catch(error => {
-        showMessage('錯誤', '執行時發生錯誤：' + error, false);
-    });
-}
 
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
-            cookie = cookie.trim();
-            if (cookie.startsWith(name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
-function showMessage(title, message, success) {
-    alert(`${title}: ${message}`);
-}
-
-grid.extraColumns = extraColumns;
-</script>
 {% endblock %}

@@ -18,6 +18,7 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from .forms.scheduler_config import SchedulerConfigurationForm
 
+
 class GanttView(GridReport):
     """
     Gantt chart view for scheduling results
@@ -78,7 +79,6 @@ class SchedulerJobList(GridReport):
         GridFieldInteger('sequence', title=_('Sequence')),
         GridFieldInteger('priority', title=_('Priority')),
         GridFieldText('configuration', title=_('Configuration')),
-        GridFieldText('can_start', title=_('Can Start'), formatter='executeButton'),  # 新增按鈕欄位
     )
     
     default_sort = (0, 'asc')
