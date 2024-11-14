@@ -49,7 +49,7 @@ gantt.attachEvent("onAfterTaskUpdate", function(id, task){
             'X-CSRFToken': getCookie('csrftoken')
         },
         body: JSON.stringify({
-            operation_id: id,
+            operation_id: task.name,
             start_date: task.start_date,
             end_date: task.end_date
         })
