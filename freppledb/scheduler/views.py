@@ -10,6 +10,7 @@ from freppledb.common.report import (
     GridFieldNumber,
     GridFieldDuration,
 )
+from freppledb.input.models.operation import Operation
 from .models import SchedulingJob, SchedulerConfiguration
 from django.views.generic.edit import CreateView, UpdateView
 from django.views import View
@@ -18,45 +19,11 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from .forms.scheduler_config import SchedulerConfigurationForm
 from django.contrib import messages
+from django.utils.decorators import method_decorator
+import logging
 
+logger = logging.getLogger(__name__)
 
-class GanttView(GridReport):
-    """
-    Gantt chart view for scheduling results
-    """
-    template = "scheduler/gantt.html"
-    title = _("Scheduling Gantt Chart")
-    
-    @csrf_exempt
-    def dispatch(self, request, *args, **kwargs):
-        if request.method == "POST":
-            # Handle updates from gantt chart
-            job_id = request.POST.get("id")
-            start_date = request.POST.get("start_date") 
-            end_date = request.POST.get("end_date")
-            
-            job = SchedulingJob.objects.get(id=job_id)
-            job.start_date = start_date
-            job.end_date = end_date
-            job.save()
-            
-            return JsonResponse({"status": "ok"})
-            
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_data(self):
-        """Return data for gantt chart"""
-        jobs = SchedulingJob.objects.all()
-        data = []
-        for job in jobs:
-            data.append({
-                "id": job.id,
-                "text": job.name,
-                "start_date": job.start_date,
-                "end_date": job.end_date,
-                "progress": 0
-            })
-        return JsonResponse({"data": data})
 
 class SchedulerJobList(GridReport):
     """
@@ -213,3 +180,82 @@ class SchedulerConfigurationEdit(UpdateView):
 
     def get_success_url(self):
         return reverse('scheduler:scheduler_config_list')
+
+class GanttDataView(View):
+    def get(self, request, job_id=None):
+        try:
+            logger.debug("Received request for Gantt data with job_id: %s", job_id)
+            data = {
+                "data": [],
+                "links": []
+            }
+            
+            if job_id:
+                logger.debug("Fetching data for job with ID: %s", job_id)
+                job = SchedulingJob.objects.get(id=job_id)
+                operations = job.operation_plan.operation_set.all()  # 使用 related_name 獲取所有操作
+            else:
+                logger.debug("Fetching data for all jobs")
+                operations = Operation.objects.all()  # 獲取所有操作
+            
+            for op in operations:
+                job_name = job.name if job_id else "All Jobs"  # 如果 job_id 為 None，則使用 "All Jobs"
+                
+                data["data"].append({
+                    "name": op.name,
+                    "text": f"{job_name} - {op.name}",
+                    "start_date": op.effective_start.strftime("%Y-%m-%d %H:%M:%S") if op.effective_start else None,
+                    "end_date": op.effective_end.strftime("%Y-%m-%d %H:%M:%S") if op.effective_end else None,
+                    "progress": 0,
+                    "job_id": job.id if job_id else None  # 如果 job_id 為 None，則設置為 None
+                })
+                
+                if op.dependencies.exists():
+                    for dep in op.dependencies.all():
+                        data["links"].append({
+                            "id": f"{op.name}_{dep.name}",
+                            "source": dep.name,
+                            "target": op.name,
+                            "type": "0"
+                        })
+            
+            logger.debug("Successfully fetched Gantt data")
+            return JsonResponse(data)
+            
+        except Exception as e:
+            logger.error("Error fetching Gantt data: %s", str(e))
+            return JsonResponse({"error": str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UpdateOperationView(View):
+    def post(self, request):
+        operation_name = request.POST.get('operation_id')
+        start_date = request.POST.get('start_date')
+        end_date = request.POST.get('end_date')
+        resource = request.POST.get('resource')
+        
+        try:
+            operation = Operation.objects.get(name=operation_name)
+            
+            # 檢查更新是否可行
+            if self.is_update_feasible(operation, start_date, end_date, resource):
+                operation.effective_start = start_date
+                operation.effective_end = end_date
+                operation.save()
+                
+                return JsonResponse({"success": True})
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": "更新不可行，請檢查資源可用性和相依關係"
+                })
+                
+        except Operation.DoesNotExist:
+            return JsonResponse({
+                "success": False,
+                "message": "Operation not found"
+            }, status=404)
+            
+    def is_update_feasible(self, operation, start_date, end_date, resource):
+        # 實現可行性檢查邏輯
+        return True

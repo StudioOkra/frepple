@@ -6,7 +6,9 @@ from .views import (
     ExecuteSchedulingJob,
     SchedulerConfigList,
     SchedulerConfigurationCreate,
-    SchedulerConfigurationEdit
+    SchedulerConfigurationEdit,
+    GanttDataView,
+    UpdateOperationView
 )
 
 # Automatically add these URLs when the application is installed
@@ -25,4 +27,9 @@ urlpatterns = [
     re_path(r'^data/scheduler/config/$', SchedulerConfigList.as_view(), name='scheduler_config_list'),
     re_path(r'^data/scheduler/schedulerconfiguration/add/$', SchedulerConfigurationCreate.as_view(), name='schedulerconfiguration_add'),
     re_path(r'^detail/scheduler_config/(?P<pk>.+)/$', SchedulerConfigurationEdit.as_view(), name='scheduler_configuration_edit'),
+    
+    # 甘特圖相關 URL
+    re_path(r'^gantt/data/$', GanttDataView.as_view(), name='gantt_data_all'),
+    re_path(r'^gantt/data/(?P<job_id>\d+)/$', GanttDataView.as_view(), name='gantt_data'),
+    re_path(r'^gantt/update-operation/$', UpdateOperationView.as_view(), name='update_operation'),
 ]
