@@ -43,7 +43,14 @@ class SchedulerEngine:
         
     def load_frepple_data(self):
         """載入 frepple 的資料"""
-        query = OperationPlan.objects.filter(status='proposed')
+        query = self.get_operation_plan_query()
+        self.operation_plans = query.select_related('operation', 'demand').prefetch_related('materials').all()
+        self.operations = list(set(op.operation for op in self.operation_plans))
+        self.resources = Resource.objects.filter(maximum__gt=0)
+    
+    def get_operation_plan_query(self):
+        """獲取操作計劃的查詢集"""
+        query = OperationPlan.objects.exclude(status='completed').filter(type='MO')
         
         # 根據 WIP 設定過濾
         if not self.configuration.wip_consume_material:
@@ -54,12 +61,8 @@ class SchedulerEngine:
             query = query.filter(startdate__gte=self.horizon_start)
         if self.horizon_end:
             query = query.filter(enddate__lte=self.horizon_end)
-            
-        self.operation_plans = query.select_related('operation', 'demand')
-        self.operations = self.operation_plans.values_list('operation', flat=True).distinct()
         
-        # 獲取可用資源，這裡假設使用 maximum 欄位
-        self.resources = Resource.objects.filter(maximum__gt=0)
+        return query
     
     def build_model(self):
         """建立生產排程模型"""
@@ -132,7 +135,7 @@ class SchedulerEngine:
                         
                     interval = self.model.NewIntervalVar(
                         opplan.start_var,
-                        int(load.duration),  # frepple 已經使用秒為單位
+                        int(load.duration),
                         opplan.end_var,
                         f'interval_{opplan.id}'
                     )
@@ -292,7 +295,7 @@ class SchedulerEngine:
         for opplan in self.operation_plans:
             # 獲取物料需求
             material_requirements = opplan.operation.materials.all()
-            
+
             for material in material_requirements:
                 # 檢查物料庫存
                 available_qty = material.buffer.onhand if hasattr(material.buffer, 'onhand') else 0

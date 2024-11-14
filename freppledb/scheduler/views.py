@@ -17,6 +17,7 @@ from .tasks import execute_scheduling_job
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from .forms.scheduler_config import SchedulerConfigurationForm
+from django.contrib import messages
 
 
 class GanttView(GridReport):
@@ -72,7 +73,7 @@ class SchedulerJobList(GridReport):
     rows = (
         GridFieldInteger('id', title=_('ID'), key=True, formatter='detail', extra='"role":"scheduler_job"'),
         GridFieldText('name', title=_('Name')),
-        GridFieldText('operation', title=_('Operation')),
+        GridFieldText('operation_plan', title=_('Operation Plan')),
         GridFieldDateTime('start_date', title=_('Start Date')),
         GridFieldDateTime('end_date', title=_('End Date')),
         GridFieldText('status', title=_('Status')),
@@ -125,14 +126,7 @@ class SchedulerJobCreate(CreateView):
     template_name = 'scheduler/schedulingjob_form.html'
     title = _('新增排程作業')
     
-    fields = [
-        'name',
-        'demand',
-        'operation',
-        'configuration',
-        'priority',
-        'status'
-    ]
+    fields = ['name', 'demand', 'operation_plan', 'configuration', 'priority', 'status']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -140,6 +134,7 @@ class SchedulerJobCreate(CreateView):
         return context
 
     def get_success_url(self):
+        messages.success(self.request, _('排程作業成功建立！'))
         return reverse('scheduler:scheduler_job_list')
 
 class SchedulerJobEdit(UpdateView):
@@ -155,6 +150,7 @@ class SchedulerJobEdit(UpdateView):
         return context
 
     def get_success_url(self):
+        messages.success(self.request, _('排程作業成功更新！'))
         return reverse('scheduler:scheduler_job_list')
 
 class ExecuteSchedulingJob(View):

@@ -132,15 +132,9 @@ class SchedulerConfiguration(models.Model):
         """驗證配置"""
         if self.horizon_start and self.horizon_end:
             if self.horizon_start >= self.horizon_end:
-                raise ValidationError({
-                    'horizon_end': _('End date must be later than start date')
-                })
-        
-        if self.size_minimum and self.size_multiple:
-            if self.size_minimum > self.size_multiple:
-                raise ValidationError({
-                    'size_multiple': _('Multiple size must be greater than or equal to minimum size')
-                })
+                raise ValidationError(_('Horizon start must be before horizon end.'))
+        if self.batch_window and self.batch_window.total_seconds() < 0:
+            raise ValidationError(_('Batch window must be a positive duration.'))
     
     class Meta:
         verbose_name = _('scheduler configuration')
@@ -167,11 +161,14 @@ class SchedulingJob(AuditModel):
         on_delete=models.CASCADE,
         related_name='scheduling_jobs'
     )
-    operation = models.ForeignKey(
-        Operation,
-        verbose_name=_('operation'),
-        on_delete=models.CASCADE
+    
+    operation_plan = models.ForeignKey(
+        'input.OperationPlan',
+        verbose_name=_('operation plan'),
+        on_delete=models.CASCADE,
+        related_name='scheduling_jobs'
     )
+    
     start_date = models.DateTimeField(_('start date'), null=True, blank=True)
     end_date = models.DateTimeField(_('end date'), null=True, blank=True)
     status = models.CharField(
@@ -189,7 +186,6 @@ class SchedulingJob(AuditModel):
         null=True
     )
     
-    # 需要新增的關聯
     buffer = models.ForeignKey(
         'input.Buffer',
         verbose_name=_('buffer'),
@@ -238,7 +234,7 @@ class SchedulingJob(AuditModel):
         """更新作業狀態"""
         if new_status not in dict(self.STATUS_CHOICES):
             raise ValueError(f"Invalid status: {new_status}")
-            
+        
         old_status = self.status
         self.status = new_status
         self.save()
@@ -250,7 +246,7 @@ class SchedulingJob(AuditModel):
             new_status=new_status,
             message=message
         )
-        
+
     @property
     def can_start(self):
         """
@@ -260,8 +256,7 @@ class SchedulingJob(AuditModel):
         return (
             self.status in ['draft', 'failed'] and
             self.demand and self.demand.status in ['open', 'quote'] and
-            self.operation and
-            self.configuration
+            self.operation_plan and self.configuration
         )
     
     def execute(self):

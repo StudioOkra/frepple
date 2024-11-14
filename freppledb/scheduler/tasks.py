@@ -31,6 +31,7 @@ def execute_scheduling_job(job_id):
             task.status = '3'  # 失敗
             task.message = str(e)
             task.finished = timezone.now()
+            logger.error(f"執行排程作業時發生錯誤: {str(e)}")
             raise
             
         finally:
