@@ -89,6 +89,7 @@ if __name__ == "__main__":
         sys.prefix = venv
 
     # Initialize django
+    print(sys.executable)
     import django
 
     django.setup()
